@@ -73,13 +73,6 @@ push_to_trunk_readme.md
 # Visual Studio Code files
 .vscode
 
-# XcodeGen
-Example/Pods/
-Example/Podfile.lock
-*.xcodeproj/
-*.xcworkspace/
-*.xcresult/
-
 # SwiftPM resolved files
 *.resolved
 .swiftpm
