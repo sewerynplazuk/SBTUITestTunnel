@@ -25,11 +25,14 @@
    </BuildAction>
    <TestAction
       buildConfiguration = "Debug"
-      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
-      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      selectedDebuggerIdentifier = ""
+      selectedLauncherIdentifier = "Xcode.IDEFoundation.Launcher.PosixSpawn"
+      language = "en"
       shouldUseLaunchSchemeArgsEnv = "YES"
+      disableMainThreadChecker = "YES"
+      region = "EN"
       codeCoverageEnabled = "YES"
-      onlyGenerateCoverageForSpecifiedTargets = "YES">
+      onlyGenerateCoverageForSpecifiedTargets = "NO">
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -44,29 +47,20 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "89EF613DCBFB53DEB2A49E22"
-               BuildableName = "SBTUITestTunnel_Tests.xctest"
-               BlueprintName = "SBTUITestTunnel_Tests"
+               BlueprintIdentifier = "874A3899B0324EFD238277B9"
+               BuildableName = "SBTUITestTunnel_TestsNoSwizzling.xctest"
+               BlueprintName = "SBTUITestTunnel_TestsNoSwizzling"
                ReferencedContainer = "container:SBTUITestTunnel.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
-      <CodeCoverageTargets>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "59DBA6ABBE02F8D87F0D7171"
-            BuildableName = "SBTUITestTunnel_Example.app"
-            BlueprintName = "SBTUITestTunnel_Example"
-            ReferencedContainer = "container:SBTUITestTunnel.xcodeproj">
-         </BuildableReference>
-      </CodeCoverageTargets>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
-      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
-      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      selectedDebuggerIdentifier = ""
+      selectedLauncherIdentifier = "Xcode.IDEFoundation.Launcher.PosixSpawn"
       launchStyle = "0"
       useCustomWorkingDirectory = "NO"
       ignoresPersistentStateOnLaunch = "NO"
@@ -87,7 +81,7 @@
       </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
-      buildConfiguration = "Release"
+      buildConfiguration = "Debug"
       shouldUseLaunchSchemeArgsEnv = "YES"
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"

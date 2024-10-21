@@ -38,6 +38,7 @@
 #import "SBTIPCTunnel.h"
 #import "SBTMonitoredNetworkRequest.h"
 #import "SBTRequestMatch.h"
+#import "SBTRequestPropertyStorage.h"
 #import "SBTRewrite.h"
 #import "SBTRewriteReplacement.h"
 #import "SBTStubFailureResponse.h"

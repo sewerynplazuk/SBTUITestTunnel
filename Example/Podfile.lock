@@ -1,9 +1,9 @@
 PODS:
-  - SBTUITestTunnelClient (10.0.0):
-    - SBTUITestTunnelCommon (= 10.0.0)
-  - SBTUITestTunnelCommon (10.0.0)
-  - SBTUITestTunnelServer (10.0.0):
-    - SBTUITestTunnelCommon (= 10.0.0)
+  - SBTUITestTunnelClient (11.0.0):
+    - SBTUITestTunnelCommon (= 11.0.0)
+  - SBTUITestTunnelCommon (11.0.0)
+  - SBTUITestTunnelServer (11.0.0):
+    - SBTUITestTunnelCommon (= 11.0.0)
 
 DEPENDENCIES:
   - SBTUITestTunnelClient (from `../`)
@@ -19,9 +19,9 @@ EXTERNAL SOURCES:
     :path: "../"
 
 SPEC CHECKSUMS:
-  SBTUITestTunnelClient: 7c7327d8678168be487f210292917492e54cb710
-  SBTUITestTunnelCommon: c29c014d774123fda90842216b293f376e3c9ac8
-  SBTUITestTunnelServer: 64a9f0b6ee34d5231263adb8638c6c7e05c51b43
+  SBTUITestTunnelClient: ff68080a0b3e1e12a4b57e0a6719a0deab918040
+  SBTUITestTunnelCommon: 6bf85343e963a9f940d8050947e083908c978f8d
+  SBTUITestTunnelServer: fd8a0aa0baf6455ceb3c77ccc7d61018001cd95d
 
 PODFILE CHECKSUM: 6cc19749c675613d2f439811503e2d47dfb6e40b
 

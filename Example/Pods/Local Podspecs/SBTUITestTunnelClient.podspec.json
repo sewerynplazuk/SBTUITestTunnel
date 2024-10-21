@@ -1,6 +1,6 @@
 {
   "name": "SBTUITestTunnelClient",
-  "version": "10.0.0",
+  "version": "11.0.0",
   "summary": "Enable network mocks and more in UI Tests",
   "description": "Use this library to easily setup an HTTP tunnel between our UI Tests cases and the app under test.\nThe tunnel allows to inject data in order to enabale network mocking.",
   "homepage": "https://github.com/Subito-it/SBTUITestTunnel",
@@ -10,7 +10,7 @@
   },
   "source": {
     "git": "https://github.com/Subito-it/SBTUITestTunnel.git",
-    "tag": "10.0.0"
+    "tag": "11.0.0"
   },
   "platforms": {
     "ios": "12.0",
@@ -31,7 +31,7 @@
   "source_files": "Sources/SBTUITestTunnelClient/**/*.{h,m}",
   "dependencies": {
     "SBTUITestTunnelCommon": [
-      "10.0.0"
+      "11.0.0"
     ]
   },
   "swift_version": "5.0"
