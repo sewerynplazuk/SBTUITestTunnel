@@ -25,6 +25,9 @@ let package = Package(
                 .headerSearchPath("GCDWebServer/Core"),
                 .headerSearchPath("GCDWebServer/Requests"),
                 .headerSearchPath("GCDWebServer/Responses"),
+            ],
+            linkerSettings: [
+                .linkedLibrary("z"),
             ]
         ),
         .target(
@@ -49,6 +52,9 @@ let package = Package(
                 .headerSearchPath("DetoxIPC/Apple"),
                 .headerSearchPath("DetoxIPC/DTXObjectiveCHelpers"),
                 .headerSearchPath("DetoxIPC/fno-objc-arc"),
+            ],
+            linkerSettings: [
+                .linkedLibrary("z"),
             ]
         ),
         .target(

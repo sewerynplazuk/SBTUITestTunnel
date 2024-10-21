@@ -157,6 +157,7 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
 - (BOOL)takeOffOnceIPCWithServiceIdentifier:(NSString *)serviceIdentifier
 {
     self.ipcConnection = [[DTXIPCConnection alloc] initWithServiceName:[NSString stringWithFormat:@"com.subito.sbtuitesttunnel.ipc.%@", serviceIdentifier]];
+    
     self.ipcConnection.remoteObjectInterface = [DTXIPCInterface interfaceWithProtocol:@protocol(SBTIPCTunnel)];
     self.ipcConnection.exportedInterface = [DTXIPCInterface interfaceWithProtocol:@protocol(SBTIPCTunnel)];
     self.ipcConnection.exportedObject = self;
@@ -167,9 +168,9 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
         BlockAssert(NO, @"[UITestTunnelServer] Failed getting IPC proxy");
     }];
     
-    [self.ipcProxy serverDidConnect:nil];
-
     [self processLaunchOptionsIfNeeded];
+    
+    [self.ipcProxy serverDidConnect:nil];
 
     if (![[NSProcessInfo processInfo].arguments containsObject:SBTUITunneledApplicationLaunchSignal]) {
         NSLog(@"[SBTUITestTunnel] Signal launch option missing, safely landing!");

@@ -79,4 +79,33 @@ class DownloadUploadTests: XCTestCase {
             XCTFail("No upload data received")
         }
     }
+
+    func testMonitorPostRequestWithHTTPLargeBodyInAppProcess() {
+        let largeBody = String(repeating: "a", count: 20000)
+        let matchingRequest = SBTRequestMatch(url: "httpbin.org", method: "POST")
+        app.monitorRequests(matching: matchingRequest)
+
+        XCTAssertTrue(app.tables.firstMatch.staticTexts["executePostDataTaskRequestWithLargeHTTPBody"].waitForExistence(timeout: 5))
+        app.tables.firstMatch.staticTexts["executePostDataTaskRequestWithLargeHTTPBody"].tap()
+
+        XCTAssertTrue(app.waitForMonitoredRequests(matching: matchingRequest, timeout: 10))
+        let requests = app.monitoredRequestsFlushAll()
+        XCTAssertEqual(requests.count, 1)
+
+        for request in requests {
+            guard let httpBody = request.request?.httpBody else {
+                XCTFail("Missing http body")
+                continue
+            }
+
+            XCTAssertEqual(String(data: httpBody, encoding: .utf8), largeBody)
+
+            XCTAssert((request.responseString()!).contains("httpbin.org"))
+            XCTAssert(request.timestamp > 0.0)
+            XCTAssert(request.requestTime > 0.0)
+        }
+
+        XCTAssert(app.stubRequestsRemoveAll())
+        XCTAssert(app.monitorRequestRemoveAll())
+    }
 }

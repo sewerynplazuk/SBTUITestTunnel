@@ -209,7 +209,9 @@ class MonitorTests: XCTestCase {
     func testMonitorPostRequestWithHTTPBody() {
         app.monitorRequests(matching: SBTRequestMatch(url: "httpbin.org", method: "POST"))
 
-        _ = request.dataTaskNetwork(urlString: "https://httpbin.org/post", httpMethod: "POST", httpBody: "&param5=val5&param6=val6")
+        let smallBody = String(repeating: "a", count: 100)
+
+        _ = request.dataTaskNetwork(urlString: "https://httpbin.org/post", httpMethod: "POST", httpBody: smallBody)
         let requests = app.monitoredRequestsFlushAll()
         XCTAssertEqual(requests.count, 1)
         print(requests.map(\.debugDescription))
@@ -220,7 +222,90 @@ class MonitorTests: XCTestCase {
                 continue
             }
 
-            XCTAssertEqual(String(data: httpBody, encoding: .utf8), "&param5=val5&param6=val6")
+            XCTAssertEqual(String(data: httpBody, encoding: .utf8), smallBody)
+
+            XCTAssert((request.responseString()!).contains("httpbin.org"))
+            XCTAssert(request.timestamp > 0.0)
+            XCTAssert(request.requestTime > 0.0)
+        }
+
+        XCTAssert(app.stubRequestsRemoveAll())
+        XCTAssert(app.monitorRequestRemoveAll())
+    }
+
+    func testMonitorPostRequestWithHTTPLargeBody() {
+        app.monitorRequests(matching: SBTRequestMatch(url: "httpbin.org", method: "POST"))
+
+        let largeBody = String(repeating: "a", count: 20000)
+
+        _ = request.dataTaskNetwork(urlString: "https://httpbin.org/post", httpMethod: "POST", httpBody: largeBody)
+        let requests = app.monitoredRequestsFlushAll()
+        XCTAssertEqual(requests.count, 1)
+        print(requests.map(\.debugDescription))
+
+        for request in requests {
+            guard let httpBody = request.request?.httpBody else {
+                XCTFail("Missing http body")
+                continue
+            }
+
+            XCTAssertEqual(String(data: httpBody, encoding: .utf8), largeBody)
+
+            XCTAssert((request.responseString()!).contains("httpbin.org"))
+            XCTAssert(request.timestamp > 0.0)
+            XCTAssert(request.requestTime > 0.0)
+        }
+
+        XCTAssert(app.stubRequestsRemoveAll())
+        XCTAssert(app.monitorRequestRemoveAll())
+    }
+
+    func testMonitorUploadRequestWithHTTPBodyShouldHaveRequestData() {
+        app.monitorRequests(matching: SBTRequestMatch(url: "httpbin.org", method: "POST"))
+
+        let largeBody = String(repeating: "a", count: 200)
+
+        _ = request.uploadTaskNetwork(urlString: "https://httpbin.org/post", data: largeBody.data(using: .utf8))
+
+        let requests = app.monitoredRequestsFlushAll()
+        XCTAssertEqual(requests.count, 1)
+        print(requests.map(\.debugDescription))
+
+        for request in requests {
+            guard let httpBody = request.requestData else {
+                XCTFail("Missing http body")
+                continue
+            }
+
+            XCTAssertEqual(String(data: httpBody, encoding: .utf8), largeBody)
+
+            XCTAssert((request.responseString()!).contains("httpbin.org"))
+            XCTAssert(request.timestamp > 0.0)
+            XCTAssert(request.requestTime > 0.0)
+        }
+
+        XCTAssert(app.stubRequestsRemoveAll())
+        XCTAssert(app.monitorRequestRemoveAll())
+    }
+
+    func testMonitorUploadRequestWithLargeHTTPBodyShouldHaveRequestData() {
+        app.monitorRequests(matching: SBTRequestMatch(url: "httpbin.org", method: "POST"))
+
+        let largeBody = String(repeating: "a", count: 20000)
+
+        _ = request.uploadTaskNetwork(urlString: "https://httpbin.org/post", data: largeBody.data(using: .utf8))
+
+        let requests = app.monitoredRequestsFlushAll()
+        XCTAssertEqual(requests.count, 1)
+        print(requests.map(\.debugDescription))
+
+        for request in requests {
+            guard let httpBody = request.requestData else {
+                XCTFail("Missing http body")
+                continue
+            }
+
+            XCTAssertEqual(String(data: httpBody, encoding: .utf8), largeBody)
 
             XCTAssert((request.responseString()!).contains("httpbin.org"))
             XCTAssert(request.timestamp > 0.0)
@@ -235,7 +320,7 @@ class MonitorTests: XCTestCase {
         app.monitorRequests(matching: SBTRequestMatch(url: "httpbin.org"))
 
         let start = Date()
-        DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 2.5) { [weak self] in
+        DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 1.0) { [weak self] in
             _ = self?.request.dataTaskNetwork(urlString: "https://httpbin.org/get?param1=val1&param2=val2", httpMethod: "GET", httpBody: nil, delay: 0.0)
         }
 
