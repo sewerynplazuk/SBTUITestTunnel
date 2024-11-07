@@ -48,6 +48,33 @@ class MiscellaneousTests: XCTestCase {
         )
     }
 
+    func testLaunchTimeWithUserDefaults() throws {
+        func writeToDefaultsAndGetDuration(amount: Int) -> CFAbsoluteTime {
+            let randomString = ProcessInfo.processInfo.globallyUniqueString
+            let start: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
+            for i in 1 ... amount {
+                self.app.userDefaultsSetObject(randomString as NSCoding & NSObjectProtocol, forKey: "\(i)")
+            }
+            return CFAbsoluteTimeGetCurrent() - start
+        }
+
+        var durations: [CFAbsoluteTime] = []
+        app.launchTunnel {
+            durations.append(writeToDefaultsAndGetDuration(amount: 50))
+            durations.append(writeToDefaultsAndGetDuration(amount: 50))
+            durations.append(writeToDefaultsAndGetDuration(amount: 50))
+            durations.append(writeToDefaultsAndGetDuration(amount: 50))
+        }
+
+        // All metrics should be of similar value, so compare them with the first one.
+        // Multiply the first one by two to give some room for variation
+        let referenceMetric = try XCTUnwrap(durations.first) * 2
+        XCTAssertTrue(
+            durations.allSatisfy { $0 < referenceMetric },
+            "User defaults writes took longer than expected: metrics \(durations) are higher than the reference \(referenceMetric)"
+        )
+    }
+
     func testStartupCommands() {
         let userDefaultsKey = "test_ud_key"
         let randomString = ProcessInfo.processInfo.globallyUniqueString
