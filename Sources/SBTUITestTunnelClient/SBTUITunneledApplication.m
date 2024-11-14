@@ -26,7 +26,7 @@
 - (instancetype)init
 {
     self = [super init];
-    
+
     if (self) {
         _client = [[SBTUITestTunnelClient alloc] initWithApplication:self];
         _client.delegate = self;
@@ -42,6 +42,16 @@
     self.launchArguments = launchArguments;
 
     [self launchTunnelWithStartupBlock: startupBlock];
+}
+
+- (void)launchTunnelWithOptions:(nonnull NSArray<NSString *> *)options retries:(NSInteger)retryThreshold retryInterval:(NSTimeInterval)retryInterval startupBlock:(void (^)(void))startupBlock;
+{
+    NSMutableArray *launchArguments = [self.launchArguments mutableCopy];
+    [launchArguments addObjectsFromArray:options];
+
+    self.launchArguments = launchArguments;
+
+    [self launchTunnelWithRetries:retryThreshold retryInterval:retryInterval startupBlock:startupBlock];
 }
 
 # pragma mark - SBTUITestTunnelClientDelegate
@@ -70,6 +80,11 @@
     [self.client launchTunnelWithStartupBlock:startupBlock];
 }
 
+- (void)launchTunnelWithRetries:(NSInteger)retryThreshold retryInterval:(NSTimeInterval)retryInterval startupBlock:(void (^)(void))startupBlock
+{
+    [self.client launchTunnelWithRetries:retryThreshold retryInterval:retryInterval startupBlock: startupBlock];
+}
+
 - (void)launchConnectionless:(NSString * (^)(NSString *, NSDictionary<NSString *,NSString *> *))command
 {
     [self.client launchConnectionless:command];
@@ -78,7 +93,7 @@
 - (void)terminate
 {
     [self.client terminate];
-    
+
     [super terminate];
 }
 
