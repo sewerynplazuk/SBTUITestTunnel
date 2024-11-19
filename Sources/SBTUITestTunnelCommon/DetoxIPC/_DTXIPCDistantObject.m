@@ -71,56 +71,63 @@
 
 - (void)forwardInvocation:(NSInvocation *)invocation
 {
-	if(_synchronous)
-	{
-		ERROR_OR_ASSERT_V(_pendingDispatchGroup == nil, @"You must not send messages from multiple threads to synchronous proxies.");
-		
-		_pendingDispatchGroup = dispatch_group_create();
-	}
-	
-	NSDictionary* serialized = [invocation _dtx_serializedDictionaryForDistantObject:self];
+    if(_synchronous)
+    {
+        ERROR_OR_ASSERT_V(_pendingDispatchGroup == nil, @"You must not send messages from multiple threads to synchronous proxies.");
+        
+        _pendingDispatchGroup = dispatch_group_create();
+    }
+    
+    NSDictionary* serialized = [invocation _dtx_serializedDictionaryForDistantObject:self];
 
-	ERROR_OR_ASSERT_V(_connection.isValid, @"Connection %@ is invalid.", _connection);
-	[_connection.otherConnection.rootProxy _invokeFromRemote:serialized];
+    ERROR_OR_ASSERT_V(_connection.isValid, @"Connection %@ is invalid.", _connection);
+    [_connection.otherConnection.rootProxy _invokeFromRemote:serialized];
 
-	if(_synchronous)
-	{
-		BOOL somethingWentWrong = NO;
-		BOOL didEndWaiting = NO;
-		
-		do {
-			didEndWaiting = dispatch_group_wait(_pendingDispatchGroup, dispatch_walltime(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC))) == 0;
-			
-			if(didEndWaiting == NO)
-			{
-				@try {
-					//Send a ping to check if the connection is still alive while waiting.
-					[_connection.otherConnection.rootProxy _ping];
-				} @catch (NSException *exception) {
-					if(_errorBlock)
-					{
-						_errorBlock([NSError errorWithDomain:DTXIPCErrorDomain code:1 userInfo:@{NSLocalizedDescriptionKey: exception.reason}]);
-					}
-					else
-					{
-						[exception raise];
-					}
-					somethingWentWrong = YES;
-				}
-			}
-		} while(somethingWentWrong == NO && didEndWaiting == NO);
+    if(_synchronous)
+    {
+        BOOL somethingWentWrong = NO;
+        BOOL didEndWaiting = NO;
+        NSArray* retryDelays = @[@(0.5), @(1.0), @(1.5)];
+        NSUInteger retryAttempt = 0;
+		const NSUInteger maxAttempts = 3;
 
-		if(didEndWaiting)
-		{
-			pthread_mutex_lock_deferred_unlock(&self->_pendingMutex);
-			[_pendingRemoteBlocks enumerateObjectsUsingBlock:^(_DTXIPCExportedObject * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-				[obj invoke];
-			}];
-			[_pendingRemoteBlocks removeAllObjects];
-		}
-		
-		_pendingDispatchGroup = nil;
-	}
+        do {
+            didEndWaiting = dispatch_group_wait(_pendingDispatchGroup, dispatch_walltime(DISPATCH_TIME_NOW, (int64_t)([retryDelays[retryAttempt] doubleValue] * NSEC_PER_SEC))) == 0;
+            
+            if(didEndWaiting == NO)
+            {
+                @try {
+                    //Send a ping to check if the connection is still alive while waiting.
+                    [_connection.otherConnection.rootProxy _ping];
+                } @catch (NSException *exception) {
+                    if (retryAttempt < maxAttempts - 1) {
+                        retryAttempt++;
+                    } else {
+                        if(_errorBlock)
+                        {
+                            _errorBlock([NSError errorWithDomain:DTXIPCErrorDomain code:1 userInfo:@{NSLocalizedDescriptionKey: exception.reason}]);
+                        }
+                        else
+                        {
+                            [exception raise];
+                        }
+                        somethingWentWrong = YES;
+                    }
+                }
+            }
+        } while(somethingWentWrong == NO && didEndWaiting == NO && retryAttempt < maxAttempts);
+
+        if(didEndWaiting)
+        {
+            pthread_mutex_lock_deferred_unlock(&self->_pendingMutex);
+            [_pendingRemoteBlocks enumerateObjectsUsingBlock:^(_DTXIPCExportedObject * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                [obj invoke];
+            }];
+            [_pendingRemoteBlocks removeAllObjects];
+        }
+        
+        _pendingDispatchGroup = nil;
+    }
 }
 
 - (void)_enterReplyBlock
