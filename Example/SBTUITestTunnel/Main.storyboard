@@ -511,7 +511,6 @@
                                 <buttonConfiguration key="configuration" style="plain" title="Ping"/>
                                 <connections>
                                     <action selector="pingButtonTapped:" destination="2mz-Wl-8w5" eventType="touchUpInside" id="pEL-ai-cNL"/>
-                                    <action selector="receiveButtonTapped:" destination="2mz-Wl-8w5" eventType="touchUpInside" id="VEI-bJ-XKI"/>
                                 </connections>
                             </button>
                             <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="Dis-co-nnc">

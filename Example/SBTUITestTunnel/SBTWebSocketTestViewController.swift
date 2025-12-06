@@ -27,14 +27,26 @@ class SBTWebSocketTestViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        timer = Timer.scheduledTimer(timeInterval: 1.0, target: self, selector: #selector(handleTimer), userInfo: nil, repeats: true)
-
         networkResult.text = networkResultString
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        
+        timer = Timer.scheduledTimer(
+            timeInterval: 1.0,
+            target: self,
+            selector: #selector(handleTimer),
+            userInfo: nil,
+            repeats: true
+        )
         
         let port = UserDefaults.standard.integer(forKey: "websocketport")
-
-        socket = URLSession.shared.webSocketTask(with: URL(string: "ws://localhost:\(port)")!)
+        
+        // Replace with wss://echo.websocket.org to live test
+        let url = URL(string: "ws://localhost:\(port)")!
+        
+        socket = URLSession.shared.webSocketTask(with: url)
         socket?.resume()
     }
 
@@ -86,6 +98,11 @@ class SBTWebSocketTestViewController: UIViewController {
                     networkResult.text = "Pong received"
                 }
             }
+        }
+        
+        // This is required to ensure there is an open receive loop after sending a ping
+        socket?.receive { result in
+            print(#function, result)
         }
     }
 
