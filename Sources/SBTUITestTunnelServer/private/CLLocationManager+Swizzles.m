@@ -136,10 +136,7 @@ static char const * const swz_creationThreadKey = "swz_creationThreadKey";
 
 - (void)sendAuthorizationStatusToDelegate:(id<CLLocationManagerDelegate>)delegate
 {
-    NSThread *targetThread = self.swz_creationThread;
-    if (targetThread == nil || !targetThread.isExecuting || targetThread.isFinished) {
-        targetThread = [NSThread mainThread];
-    }
+    NSThread *targetThread = self.swz_creationThread ?: [NSThread mainThread];
 
     if ([delegate respondsToSelector:@selector(locationManager:didChangeAuthorizationStatus:)]) {
         [self performSelector:@selector(swz_invokeOldDelegate:)
