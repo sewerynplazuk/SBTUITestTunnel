@@ -15,10 +15,9 @@ class CoreLocationTests: XCTestCase {
         app.launchTunnel()
 
         app.coreLocationStubEnabled(true)
-        XCTAssertEqual(getStubbedCoreLocationAuthorizationStatus(), .authorizedAlways)
 
         app.tables.cells["showCoreLocationViewController"].tap()
-        wait { self.app.staticTexts["location_status"].label == "-" }
+        wait { self.app.staticTexts["location_status"].label == "authorizedAlways" }
 
         app.coreLocationStubAuthorizationStatus(.notDetermined)
         XCTAssertEqual(getStubbedCoreLocationAuthorizationStatus(), .notDetermined)

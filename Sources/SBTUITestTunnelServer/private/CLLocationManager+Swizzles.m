@@ -30,6 +30,24 @@ static NSString *_serviceStatus;
 
 @implementation CLLocationManager (Swizzles)
 
+static char const * const swz_creationThreadKey = "swz_creationThreadKey";
+
+- (void)setSwz_creationThread:(NSThread *)thread {
+    objc_setAssociatedObject(self, swz_creationThreadKey, thread, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (NSThread *)swz_creationThread {
+    return objc_getAssociatedObject(self, swz_creationThreadKey);
+}
+
+- (instancetype)init_swz {
+    self = [self init_swz];
+    if (self) {
+        self.swz_creationThread = [NSThread currentThread];
+    }
+    return self;
+}
+
 - (void)swz_startMonitoring
 {
     [_instanceHashTable setObject:[_delegatesHashTable objectForKey:self] forKey:self];
@@ -109,6 +127,45 @@ static NSString *_serviceStatus;
 {
     [_delegatesHashTable setObject:delegate forKey:self];
     [_instanceHashTable setObject:[_delegatesHashTable objectForKey:self] forKey:self];
+
+    // Core Location always calls locationManagerDidChangeAuthorization:
+    // ... when your app creates an instance of CLLocationManager,
+    // whether your app runs in the foreground or in the background.
+    [self sendAuthorizationStatusToDelegate:delegate];
+}
+
+- (void)sendAuthorizationStatusToDelegate:(id<CLLocationManagerDelegate>)delegate
+{
+    NSThread *targetThread = self.swz_creationThread ?: [NSThread mainThread];
+
+    if ([delegate respondsToSelector:@selector(locationManager:didChangeAuthorizationStatus:)]) {
+        [self performSelector:@selector(swz_invokeOldDelegate:)
+                     onThread:targetThread
+                   withObject:delegate
+                waitUntilDone:NO];
+    }
+
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
+    if (@available(iOS 14.0, *)) {
+        if ([delegate respondsToSelector:@selector(locationManagerDidChangeAuthorization:)]) {
+            [self performSelector:@selector(swz_invokeNewDelegate:)
+                         onThread:targetThread
+                       withObject:delegate
+                    waitUntilDone:NO];
+        }
+    }
+#endif
+}
+
+- (void)swz_invokeOldDelegate:(id<CLLocationManagerDelegate>)delegate {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    [delegate locationManager:self didChangeAuthorizationStatus:self.swz_authorizationStatus];
+#pragma GCC diagnostic pop
+}
+
+- (void)swz_invokeNewDelegate:(id<CLLocationManagerDelegate>)delegate {
+    [delegate locationManagerDidChangeAuthorization:self];
 }
 
 - (id<CLLocationManagerDelegate>)stubbedDelegate
@@ -147,6 +204,7 @@ static NSString *_serviceStatus;
     
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
+        SBTTestTunnelInstanceSwizzle(self.class, @selector(init), @selector(init_swz));
         SBTTestTunnelInstanceSwizzle(self.class, @selector(startMonitoring), @selector(swz_startMonitoring));
         SBTTestTunnelInstanceSwizzle(self.class, @selector(startUpdatingLocation), @selector(swz_startUpdatingLocation));
         SBTTestTunnelInstanceSwizzle(self.class, @selector(startUpdatingHeading), @selector(swz_startUpdatingHeading));
@@ -176,6 +234,7 @@ static NSString *_serviceStatus;
     // Repeat swizzle to restore default implementation
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
+        SBTTestTunnelInstanceSwizzle(self.class, @selector(init), @selector(init_swz));
         SBTTestTunnelInstanceSwizzle(self.class, @selector(startMonitoring), @selector(swz_startMonitoring));
         SBTTestTunnelInstanceSwizzle(self.class, @selector(startUpdatingLocation), @selector(swz_startUpdatingLocation));
         SBTTestTunnelInstanceSwizzle(self.class, @selector(startUpdatingHeading), @selector(swz_startUpdatingHeading));

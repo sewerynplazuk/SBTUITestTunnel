@@ -42,6 +42,17 @@ class NoSwizzlingTests: XCTestCase {
         expectation(for: NSPredicate(format: "count > 0"), evaluatedWith: app.tables)
         waitForExpectations(timeout: 15.0, handler: nil)
     }
+
+    func testCoreLocationAuthorizationStatus() {
+        app.launchTunnel()
+
+        app.tables.cells["showCoreLocationViewController"].tap()
+        let statusPredicate = NSPredicate(format: "label == %@", "notDetermined")
+        let statusElement = app.staticTexts["location_status"]
+        expectation(for: statusPredicate, evaluatedWith: statusElement)
+        waitForExpectations(timeout: 15.0, handler: nil)
+    }
+
 }
 
 class MyCustomApplication: XCUIApplication {
