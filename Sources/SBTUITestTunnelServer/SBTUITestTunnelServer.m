@@ -86,6 +86,7 @@ void repeating_dispatch_after(int64_t delay, dispatch_queue_t queue, BOOL (^bloc
 @property (nonatomic, strong) NSMapTable<CLLocationManager *, id<CLLocationManagerDelegate>> *coreLocationActiveManagers;
 @property (nonatomic, strong) NSMutableString *coreLocationStubbedServiceStatus;
 @property (nonatomic, strong) NSMutableString *notificationCenterStubbedAuthorizationStatus;
+@property (nonatomic, assign) CGRect keyboardFrameInScreenCoordinates;
 
 @property (nonatomic, strong) DTXIPCConnection* ipcConnection;
 @property (nonatomic, strong) id<SBTIPCTunnel> ipcProxy;
@@ -109,6 +110,9 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
         sharedInstance.coreLocationStubbedServiceStatus = [NSMutableString string];
         sharedInstance.notificationCenterStubbedAuthorizationStatus = [NSMutableString stringWithString:[@(UNAuthorizationStatusAuthorized) stringValue]];
         sharedInstance.webSocketServers = [NSMutableDictionary dictionary];
+        sharedInstance.keyboardFrameInScreenCoordinates = CGRectNull;
+
+        [sharedInstance startObservingKeyboardNotifications];
 
         [sharedInstance reset];
     });
@@ -865,6 +869,74 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
     return @{ SBTUITunnelResponseResultKey: @"YES" };
 }
 
+- (void)startObservingKeyboardNotifications
+{
+    NSNotificationCenter *notificationCenter = NSNotificationCenter.defaultCenter;
+
+    [notificationCenter addObserver:self selector:@selector(handleKeyboardWillChangeFrame:) name:UIKeyboardWillChangeFrameNotification object:nil];
+    [notificationCenter addObserver:self selector:@selector(handleKeyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)handleKeyboardWillChangeFrame:(NSNotification *)notification
+{
+    CGRect keyboardFrame = [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    self.keyboardFrameInScreenCoordinates = keyboardFrame;
+}
+
+- (void)handleKeyboardWillHide:(NSNotification *)notification
+{
+    self.keyboardFrameInScreenCoordinates = CGRectNull;
+}
+
+- (BOOL)isKeyboardVisible
+{
+    return !CGRectIsNull(self.keyboardFrameInScreenCoordinates) && !CGRectIsEmpty(self.keyboardFrameInScreenCoordinates);
+}
+
+- (CGFloat)maxContentOffsetForScrollView:(UIScrollView *)scrollView direction:(SBTUITestTunnelScrollDirection)direction
+{
+    UIEdgeInsets insets = scrollView.adjustedContentInset;
+
+    if (direction == SBTUITestTunnelScrollDirectionHorizontal) {
+        CGFloat maxOffset = scrollView.contentSize.width - scrollView.bounds.size.width + insets.right;
+        return MAX(-insets.left, maxOffset);
+    }
+
+    CGFloat maxOffset = scrollView.contentSize.height - scrollView.bounds.size.height + insets.bottom;
+    return MAX(-insets.top, maxOffset);
+}
+
+- (CGRect)visibleUnobscuredFrameInWindowForScrollView:(UIScrollView *)scrollView
+{
+    UIWindow *window = scrollView.window ?: UIApplication.sharedApplication.keyWindow;
+    if (window == nil) {
+        return CGRectZero;
+    }
+
+    CGRect visibleFrame = [scrollView convertRect:scrollView.bounds toView:window];
+    visibleFrame = CGRectIntersection(window.bounds, visibleFrame);
+
+    if (CGRectIsNull(visibleFrame) || CGRectIsEmpty(visibleFrame)) {
+        return CGRectZero;
+    }
+
+    if ([self isKeyboardVisible]) {
+        CGRect keyboardFrame = [window convertRect:self.keyboardFrameInScreenCoordinates fromWindow:nil];
+        CGRect overlap = CGRectIntersection(visibleFrame, keyboardFrame);
+        if (!CGRectIsNull(overlap) && !CGRectIsEmpty(overlap)) {
+            if (CGRectGetMinY(overlap) > CGRectGetMinY(visibleFrame)) {
+                visibleFrame.size.height = MAX(0.0, CGRectGetMinY(overlap) - CGRectGetMinY(visibleFrame));
+            } else {
+                CGFloat visibleMaxY = CGRectGetMaxY(visibleFrame);
+                visibleFrame.origin.y = CGRectGetMaxY(overlap);
+                visibleFrame.size.height = MAX(0.0, visibleMaxY - CGRectGetMinY(visibleFrame));
+            }
+        }
+    }
+
+    return visibleFrame;
+}
+
 #pragma mark - XCUITest scroll extensions
 
 - (BOOL)scrollElementWithIdentifier:(NSString *)elementIdentifier elementClass:(Class)elementClass toRow:(NSInteger)elementRow numberOfSections:(NSInteger (^)(UIView *))sectionsDataSource numberOfRows:(NSInteger (^)(UIView *, NSInteger))rowsDataSource scrollDelegate:(void (^)(UIView *, NSIndexPath *))scrollDelegate;
@@ -969,6 +1041,7 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
                 BOOL expectedIdentifier = [view.accessibilityIdentifier isEqualToString:elementIdentifier] || [view.accessibilityLabel isEqualToString:elementIdentifier];
                 if (expectedIdentifier) {
                     UIScrollView *scrollView = (UIScrollView *)view;
+                    SBTUITestTunnelScrollDirection scrollDirection = scrollView.suggestedScrollDirection;
 
                     while (!result) {
                         NSArray *allScrollViewViews = [scrollView allSubviews];
@@ -976,16 +1049,33 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
                             BOOL expectedTargetIdentifier = [scrollViewView.accessibilityIdentifier isEqualToString:targetElementIdentifier] || [scrollViewView.accessibilityLabel isEqualToString:targetElementIdentifier];
                             
                             if (expectedTargetIdentifier) {
-                                CGRect frameInScrollView = [scrollViewView convertRect:scrollViewView.bounds toView:scrollView];
-                                CGFloat targetContentOffsetX = 0.0;
-                                CGFloat targetContentOffsetY = 0.0;
+                                CGFloat targetContentOffsetX = scrollView.contentOffset.x;
+                                CGFloat targetContentOffsetY = scrollView.contentOffset.y;
 
-                                if (scrollView.suggestedScrollDirection == SBTUITestTunnelScrollDirectionVertical) {
-                                    targetContentOffsetX = scrollView.contentOffset.x;
-                                    targetContentOffsetY = MAX(0.0, frameInScrollView.origin.y - view.bounds.size.height / 2);
-                                } else if (scrollView.suggestedScrollDirection == SBTUITestTunnelScrollDirectionHorizontal) {
-                                    targetContentOffsetX = MAX(0.0, frameInScrollView.origin.x - view.bounds.size.width / 2);
-                                    targetContentOffsetY = scrollView.contentOffset.y;
+                                BOOL keyboardVisible = [self isKeyboardVisible];
+                                BOOL isVertical = (scrollDirection == SBTUITestTunnelScrollDirectionVertical);
+
+                                if (keyboardVisible) {
+                                    UIWindow *window = scrollView.window ?: UIApplication.sharedApplication.keyWindow;
+                                    CGRect visibleFrameInWindow = [self visibleUnobscuredFrameInWindowForScrollView:scrollView];
+                                    CGRect targetFrameInWindow = [scrollViewView convertRect:scrollViewView.bounds toView:window];
+                                    UIEdgeInsets insets = scrollView.adjustedContentInset;
+                                    CGFloat maxOffset = [self maxContentOffsetForScrollView:scrollView direction:scrollDirection];
+
+                                    if (isVertical) {
+                                        targetContentOffsetY = scrollView.contentOffset.y + (CGRectGetMidY(targetFrameInWindow) - CGRectGetMidY(visibleFrameInWindow));
+                                        targetContentOffsetY = MIN(maxOffset, MAX(-insets.top, targetContentOffsetY));
+                                    } else {
+                                        targetContentOffsetX = scrollView.contentOffset.x + (CGRectGetMidX(targetFrameInWindow) - CGRectGetMidX(visibleFrameInWindow));
+                                        targetContentOffsetX = MIN(maxOffset, MAX(-insets.left, targetContentOffsetX));
+                                    }
+                                } else {
+                                    CGRect frameInScrollView = [scrollViewView convertRect:scrollViewView.bounds toView:scrollView];
+                                    if (isVertical) {
+                                        targetContentOffsetY = MAX(0.0, frameInScrollView.origin.y - scrollView.bounds.size.height / 2.0);
+                                    } else {
+                                        targetContentOffsetX = MAX(0.0, frameInScrollView.origin.x - scrollView.bounds.size.width / 2.0);
+                                    }
                                 }
 
                                 [scrollView setContentOffset:CGPointMake(targetContentOffsetX, targetContentOffsetY) animated:animated];
@@ -1001,7 +1091,7 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
                         if (result) {
                             break;
                         } else {
-                            if (scrollView.suggestedScrollDirection == SBTUITestTunnelScrollDirectionVertical) {
+                            if (scrollDirection == SBTUITestTunnelScrollDirectionVertical) {
                                 CGFloat maxOffset = MAX(0, floor(scrollView.contentSize.height - scrollView.bounds.size.height / 2.0));
                                 if (scrollView.contentOffset.y < maxOffset)  {
                                     CGFloat targetContentOffsetY = MIN(maxOffset, ceil(scrollView.contentOffset.y + scrollView.frame.size.height));
@@ -1014,7 +1104,7 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
                                 } else {
                                     break;
                                 }
-                            } else if (scrollView.suggestedScrollDirection == SBTUITestTunnelScrollDirectionHorizontal) {
+                            } else if (scrollDirection == SBTUITestTunnelScrollDirectionHorizontal) {
                                 CGFloat maxOffset = MAX(0, floor(scrollView.contentSize.width - scrollView.bounds.size.width / 2.0));
                                 if (scrollView.contentOffset.x < maxOffset)  {
                                     CGFloat targetContentOffsetX = MIN(maxOffset, ceil(scrollView.contentOffset.x + scrollView.frame.size.width));

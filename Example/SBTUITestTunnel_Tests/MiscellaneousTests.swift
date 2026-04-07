@@ -226,6 +226,42 @@ class MiscellaneousTests: XCTestCase {
         XCTAssert(app.buttons["Button"].isHittable)
     }
 
+    func testScrollViewScrollToElementWithKeyboardVisible() {
+        app.launchTunnel()
+
+        app.cells["showExtensionCollectionViewWithKeyboard"].tap()
+
+        let textField = app.textFields["keyboardTextField"]
+        wait { textField.isHittable }
+        textField.tap()
+
+        wait { self.app.keyboards.count > 0 }
+
+        XCTAssertFalse(app.staticTexts["50"].isHittable)
+
+        XCTAssertTrue(app.scrollScrollView(withIdentifier: "scrollViewWithKeyboard", toElementWithIdentifier: "50", animated: true))
+
+        let element = app.staticTexts["50"]
+        XCTAssert(element.isHittable)
+
+        // Verify the element is centered in the visible area (between collection view top and keyboard top)
+        let collectionView = app.collectionViews["scrollViewWithKeyboard"]
+        let keyboard = app.keyboards.firstMatch
+        let visibleTop = collectionView.frame.minY
+        let visibleBottom = keyboard.frame.minY
+        let visibleMidY = (visibleTop + visibleBottom) / 2.0
+        
+        let elementMidY = element.frame.midY
+
+        let tolerance = element.frame.height / 2.0 + 50.0
+        XCTAssertEqual(
+            elementMidY,
+            visibleMidY,
+            accuracy: tolerance,
+            "Element midY (\(elementMidY)) should be near visible area midY (\(visibleMidY)), difference: \(abs(elementMidY - visibleMidY)), tolerance: \(tolerance)"
+        )
+    }
+
     func testScrollViewScrollToOffset() {
         app.launchTunnel()
 
