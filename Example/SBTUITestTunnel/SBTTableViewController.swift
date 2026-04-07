@@ -37,6 +37,7 @@ class Extension3Test: BaseTest {}
 class Extension4Test: BaseTest {}
 class Extension5Test: BaseTest {}
 class Extension6Test: BaseTest {}
+class Extension7Test: BaseTest {}
 class CrashTest: BaseTest {}
 
 class SBTTableViewController: UITableViewController {
@@ -65,6 +66,7 @@ class SBTTableViewController: UITableViewController {
                                         Extension4Test(testSelector: #selector(showCoreLocationViewController)),
                                         Extension5Test(testSelector: #selector(showExtensionCollectionViewVertical)),
                                         Extension6Test(testSelector: #selector(showExtensionCollectionViewHorizontal)),
+                                        Extension7Test(testSelector: #selector(showExtensionCollectionViewWithKeyboard)),
                                         CrashTest(testSelector: #selector(crashApp))]
 
     override func tableView(_: UITableView, numberOfRowsInSection _: Int) -> Int {
@@ -92,6 +94,8 @@ class SBTTableViewController: UITableViewController {
             tableView.dequeueReusableCell(withIdentifier: "extension5Cell", for: indexPath)
         } else if testList[indexPath.row] is Extension6Test {
             tableView.dequeueReusableCell(withIdentifier: "extension6Cell", for: indexPath)
+        } else if testList[indexPath.row] is Extension7Test {
+            tableView.dequeueReusableCell(withIdentifier: "extension7Cell", for: indexPath)
         } else if testList[indexPath.row] is CrashTest {
             tableView.dequeueReusableCell(withIdentifier: "crashCell", for: indexPath)
         } else {
@@ -448,6 +452,11 @@ extension SBTTableViewController {
 
     @objc func showExtensionCollectionViewHorizontal() {
         let targetViewController = SBTExtensionCollectionViewController(scrollDirection: .horizontal)
+        navigationController?.pushViewController(targetViewController, animated: true)
+    }
+    
+    @objc func showExtensionCollectionViewWithKeyboard() {
+        let targetViewController = SBTExtensionCollectionViewWithKeyboardViewController()
         navigationController?.pushViewController(targetViewController, animated: true)
     }
 }
