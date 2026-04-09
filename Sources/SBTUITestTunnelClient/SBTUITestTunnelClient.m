@@ -44,6 +44,7 @@ const NSString *SBTUITunnelJsonMimeType = @"application/json";
 @property (nonatomic, strong) DTXIPCConnection* ipcConnection;
 @property (nonatomic, strong) id<SBTIPCTunnel> ipcProxy;
 @property (nonatomic, assign) NSTimeInterval launchStart;
+@property (nonatomic, copy) NSString *httpSessionIdentifier;
 
 @end
 
@@ -148,29 +149,26 @@ static NSTimeInterval SBTUITunneledApplicationDefaultTimeout = 30.0;
         launchEnvironment[SBTUITunneledApplicationLaunchEnvironmentIPCKey] = serviceIdentifier;
         self.application.launchEnvironment = launchEnvironment;
     } else {
-        self.connectionPort = [SBTUITestTunnelNetworkUtility reserveSocketPort];
-        NSLog(@"[SBTUITestTunnel] Resolving connection on port %ld", self.connectionPort);
-        
-        if (self.connectionPort < 0) {
-            return [self shutDownWithErrorMessage:[NSString stringWithFormat:@"[SBTUItestTunnel] Failed finding open port, error: %ld", self.connectionPort] code:SBTUITestTunnelErrorLaunchFailed];
-        }
+        NSString *httpSessionIdentifier = [NSUUID UUID].UUIDString;
+        self.httpSessionIdentifier = httpSessionIdentifier;
 
-        launchEnvironment[SBTUITunneledApplicationLaunchEnvironmentPortKey] = [NSString stringWithFormat: @"%ld", (long)self.connectionPort];
+        launchEnvironment[SBTUITunneledApplicationLaunchEnvironmentHTTPSessionKey] = httpSessionIdentifier;
         self.application.launchEnvironment = launchEnvironment;
-        
+
+        NSLog(@"[SBTUITestTunnel] Using dynamic port discovery with session %@", httpSessionIdentifier);
+
         __weak typeof(self)weakSelf = self;
-        // Start polling the server with the choosen port
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            [weakSelf waitForConnection];
+            [weakSelf waitForPortFileAndConnect];
             NSLog(@"[SBTUITestTunnel] HTTP tunnel did connect after, %fs", CFAbsoluteTimeGetCurrent() - self.launchStart);
-            
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 weakSelf.connected = YES;
                 if (weakSelf.startupBlock) {
                     weakSelf.startupBlock();
                     NSLog(@"[SBTUITestTunnel] Did perform startupBlock");
                 }
-                
+
                 NSAssert([NSThread isMainThread], @"We synch on main thread");
                 weakSelf.startupCompleted = [[self sendSynchronousRequestWithPath:SBTUITunneledApplicationCommandStartupCommandsCompleted params:@{}] isEqualToString:@"YES"];
             });
@@ -243,6 +241,30 @@ static NSTimeInterval SBTUITunneledApplicationDefaultTimeout = 30.0;
     }
 
     [self shutDownWithErrorMessage:@"Failed waiting for app to be ready" code:SBTUITestTunnelErrorConnectionToApplicationFailed];
+}
+
+- (void)waitForPortFileAndConnect
+{
+    NSString *portFilePath = SBTUITestTunnelPortFilePathForSessionIdentifier(self.httpSessionIdentifier);
+    NSTimeInterval start = CFAbsoluteTimeGetCurrent();
+
+    while (CFAbsoluteTimeGetCurrent() - start < self.connectionTimeout) {
+        NSString *portString = [NSString stringWithContentsOfFile:portFilePath encoding:NSUTF8StringEncoding error:nil];
+        if (portString.length > 0) {
+            NSInteger port = [portString integerValue];
+            if (port > 0) {
+                self.connectionPort = port;
+                NSLog(@"[SBTUITestTunnel] Discovered dynamic port %ld from file", (long)port);
+
+                // Now wait for TCP connection + ping, reusing existing logic
+                [self waitForConnection];
+                return;
+            }
+        }
+        [NSThread sleepForTimeInterval:0.5];
+    }
+
+    [self shutDownWithErrorMessage:@"Failed waiting for port file" code:SBTUITestTunnelErrorConnectionToApplicationFailed];
 }
 
 // MARK: - SBTIPCTunnel

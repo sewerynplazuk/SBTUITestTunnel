@@ -19,7 +19,10 @@
 
 extern NSString * _Nonnull const SBTUITunneledApplicationLaunchEnvironmentIPCKey;
 extern NSString * _Nonnull const SBTUITunneledApplicationLaunchEnvironmentPortKey;
+extern NSString * _Nonnull const SBTUITunneledApplicationLaunchEnvironmentHTTPSessionKey;
 extern NSString * _Nonnull const SBTUITunneledApplicationDefaultHost;
+
+NSString * _Nonnull SBTUITestTunnelPortFilePathForSessionIdentifier(NSString * _Nonnull identifier);
 
 extern const double
 SBTUITunnelStubsDownloadSpeedGPRS,

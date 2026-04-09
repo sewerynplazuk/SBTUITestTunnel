@@ -18,7 +18,16 @@
 
 NSString * const SBTUITunneledApplicationLaunchEnvironmentIPCKey = @"SBTUITunneledApplicationLaunchEnvironmentIPCKey";
 NSString * const SBTUITunneledApplicationLaunchEnvironmentPortKey = @"SBTUITunneledApplicationLaunchEnvironmentPortKey";
+NSString * const SBTUITunneledApplicationLaunchEnvironmentHTTPSessionKey = @"SBTUITunneledApplicationLaunchEnvironmentHTTPSessionKey";
 NSString * const SBTUITunneledApplicationDefaultHost = @"localhost";
+
+NSString * SBTUITestTunnelPortFilePathForSessionIdentifier(NSString *identifier)
+{
+    // Use /tmp directly because NSTemporaryDirectory() returns sandboxed paths
+    // that differ between the test runner (host) and simulator app processes.
+    // /tmp is shared between both on macOS simulator environments.
+    return [NSString stringWithFormat:@"/tmp/sbtuitesttunnel-%@.port", identifier];
+}
 
 const double SBTUITunnelStubsDownloadSpeedGPRS   =-    56 / 8; // kbps -> KB/s
 const double SBTUITunnelStubsDownloadSpeedEDGE   =-   128 / 8; // kbps -> KB/s

@@ -91,6 +91,8 @@ void repeating_dispatch_after(int64_t delay, dispatch_queue_t queue, BOOL (^bloc
 @property (nonatomic, strong) DTXIPCConnection* ipcConnection;
 @property (nonatomic, strong) id<SBTIPCTunnel> ipcProxy;
 
+@property (nonatomic, copy) NSString *httpSessionIdentifier;
+
 @end
 
 @implementation SBTUITestTunnelServer
@@ -140,23 +142,27 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
 - (BOOL)takeOffOnce
 {
     NSDictionary<NSString *, NSString *> *environment = [NSProcessInfo processInfo].environment;
-    
+
     NSString *ipcIdentifier = environment[SBTUITunneledApplicationLaunchEnvironmentIPCKey];
+    NSString *httpSessionIdentifier = environment[SBTUITunneledApplicationLaunchEnvironmentHTTPSessionKey];
     NSString *tunnelPort = environment[SBTUITunneledApplicationLaunchEnvironmentPortKey];
-    
-    if (!tunnelPort && !ipcIdentifier) {
+
+    if (!tunnelPort && !ipcIdentifier && !httpSessionIdentifier) {
         [NSURLProtocol unregisterClass:[SBTProxyURLProtocol class]];
-        
+
         // Required methods missing, presumely app wasn't launched from ui test
         NSLog(@"[SBTUITestTunnel] required environment parameters missing, safely landing");
         return NO;
     }
-    
+
     [NSURLProtocol registerClass:[SBTProxyURLProtocol class]];
-        
+
     if (ipcIdentifier) {
         NSLog(@"[SBTUITestTunnel] IPC tunnel taking off");
         return [self takeOffOnceIPCWithServiceIdentifier:ipcIdentifier];
+    } else if (httpSessionIdentifier) {
+        NSLog(@"[SBTUITestTunnel] HTTP tunnel taking off with dynamic port");
+        return [self takeOffOnceUsingDynamicPortWithSessionIdentifier:httpSessionIdentifier];
     } else {
         NSLog(@"[SBTUITestTunnel] HTTP tunnel taking off");
         return [self takeOffOnceUsingHTTPPort:tunnelPort];
@@ -229,67 +235,131 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
     });
 }
 
-- (BOOL)takeOffOnceUsingHTTPPort:(NSString *)tunnelPort
+- (void)installHTTPRequestHandler
 {
     Class requestClass = ([SBTUITunnelHTTPMethod isEqualToString:@"POST"]) ? [SBTWebServerURLEncodedFormRequest class] : [SBTWebServerRequest class];
-    
+
     __weak typeof(self) weakSelf = self;
     [self.server addDefaultHandlerForMethod:SBTUITunnelHTTPMethod requestClass:requestClass processBlock:^SBTWebServerResponse *(SBTWebServerRequest* request) {
         __strong typeof(weakSelf)strongSelf = weakSelf;
         __block SBTWebServerDataResponse *ret;
-        
+
         dispatch_semaphore_t sem = dispatch_semaphore_create(0);
         dispatch_async(strongSelf.commandDispatchQueue, ^{
             NSString *command = [request.path stringByReplacingOccurrencesOfString:@"/" withString:@""];
-            
+
             NSString *commandString = [command stringByAppendingString:@":"];
             SEL commandSelector = NSSelectorFromString(commandString);
             NSDictionary *response = nil;
-            
+
             if (![strongSelf processCustomCommandIfNecessary:command parameters:request.parameters returnObject:&response]) {
                 if (![strongSelf respondsToSelector:commandSelector]) {
                     BlockAssert(NO, @"[UITestTunnelServer] Unhandled/unknown command! %@", command);
                 }
-                
+
                 IMP imp = [strongSelf methodForSelector:commandSelector];
-                
+
                 NSLog(@"[SBTUITestTunnel] Executing command '%@'", command);
-                
+
                 NSDictionary * (*func)(id, SEL, NSDictionary *) = (void *)imp;
                 response = func(strongSelf, commandSelector, request.parameters);
             }
-            
+
             ret = [SBTWebServerDataResponse responseWithJSONObject:response];
-            
+
             dispatch_semaphore_signal(sem);
         });
-        
+
         if (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(SBTUITunneledServerDefaultTimeout * NSEC_PER_SEC))) != 0) {}
         return ret;
     }];
-    
-    [self processLaunchOptionsIfNeeded];
-    
-    if (![[NSProcessInfo processInfo].arguments containsObject:SBTUITunneledApplicationLaunchSignal]) {
-        NSLog(@"[SBTUITestTunnel] Signal launch option missing, safely landing!");
-        return NO;
-    }
-    
-    NSDictionary *serverOptions = [NSMutableDictionary dictionary];
-    
+}
+
+- (NSMutableDictionary *)baseServerOptions
+{
+    NSMutableDictionary *serverOptions = [NSMutableDictionary dictionary];
+
     [serverOptions setValue:@NO forKey:SBTWebServerOption_AutomaticallySuspendInBackground];
     [serverOptions setValue:@(YES) forKey:SBTWebServerOption_BindToLocalhost];
     if (![[NSProcessInfo processInfo].arguments containsObject:SBTUITunneledApplicationLaunchOptionDisableKeepAlive]) {
         [serverOptions setValue:@(YES) forKey:SBTWebServerOption_EnableKeepAlive];
     }
-    
+
+    return serverOptions;
+}
+
+- (BOOL)waitForStartupCompletion
+{
+    NSAssert([NSThread isMainThread], @"We synch startupCompleted on main thread");
+    NSTimeInterval start = CFAbsoluteTimeGetCurrent();
+    while (CFAbsoluteTimeGetCurrent() - start < SBTUITunneledServerDefaultTimeout) {
+        [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+
+        if (self.startupCompleted) {
+            NSLog(@"[SBTUITestTunnel] Up and running!");
+            return YES;
+        }
+    }
+
+    BlockAssert(NO, @"[UITestTunnelServer] Fail waiting for launch semaphore");
+    return NO;
+}
+
+- (BOOL)takeOffOnceUsingDynamicPortWithSessionIdentifier:(NSString *)sessionIdentifier
+{
+    [self installHTTPRequestHandler];
+    [self processLaunchOptionsIfNeeded];
+
+    if (![[NSProcessInfo processInfo].arguments containsObject:SBTUITunneledApplicationLaunchSignal]) {
+        NSLog(@"[SBTUITestTunnel] Signal launch option missing, safely landing!");
+        return NO;
+    }
+
+    NSMutableDictionary *serverOptions = [self baseServerOptions];
+    [serverOptions setValue:@(0) forKey:SBTWebServerOption_Port];
+    NSLog(@"[SBTUITestTunnel] Starting server with dynamic port assignment");
+
+    [SBTWebServer setLogLevel:3];
+
+    NSError *serverError = nil;
+    if (![self.server startWithOptions:serverOptions error:&serverError]) {
+        BlockAssert(NO, @"[UITestTunnelServer] Failed to start server with dynamic port. %@", serverError.description);
+        return NO;
+    }
+
+    NSUInteger assignedPort = self.server.port;
+    NSString *portFilePath = SBTUITestTunnelPortFilePathForSessionIdentifier(sessionIdentifier);
+    NSString *portString = [NSString stringWithFormat:@"%lu", (unsigned long)assignedPort];
+    NSError *writeError = nil;
+    if (![portString writeToFile:portFilePath atomically:YES encoding:NSUTF8StringEncoding error:&writeError]) {
+        BlockAssert(NO, @"[UITestTunnelServer] Failed to write port file at %@. %@", portFilePath, writeError.description);
+        return NO;
+    }
+    self.httpSessionIdentifier = sessionIdentifier;
+    NSLog(@"[SBTUITestTunnel] Server started on dynamic port %lu, wrote port file to %@", (unsigned long)assignedPort, portFilePath);
+
+    return [self waitForStartupCompletion];
+}
+
+- (BOOL)takeOffOnceUsingHTTPPort:(NSString *)tunnelPort
+{
+    [self installHTTPRequestHandler];
+    [self processLaunchOptionsIfNeeded];
+
+    if (![[NSProcessInfo processInfo].arguments containsObject:SBTUITunneledApplicationLaunchSignal]) {
+        NSLog(@"[SBTUITestTunnel] Signal launch option missing, safely landing!");
+        return NO;
+    }
+
+    NSMutableDictionary *serverOptions = [self baseServerOptions];
+
     if (tunnelPort) {
         [serverOptions setValue:@([tunnelPort intValue]) forKey:SBTWebServerOption_Port];
         NSLog(@"[SBTUITestTunnel] Starting server on port: %@", tunnelPort);
     } else {
         NSAssert(NO, @"No valid discovery method passed");
     }
-    
+
     [SBTWebServer setLogLevel:3];
 
     NSError *serverError = nil;
@@ -297,21 +367,8 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
         BlockAssert(NO, @"[UITestTunnelServer] Failed to start server on port %d. %@", [tunnelPort intValue], serverError.description);
         return NO;
     }
-    
-    NSAssert([NSThread isMainThread], @"We synch startupCompleted on main thread");
-    NSTimeInterval start = CFAbsoluteTimeGetCurrent();
-    while (CFAbsoluteTimeGetCurrent() - start < SBTUITunneledServerDefaultTimeout) {
-        [NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
-        
-        if (self.startupCompleted) {
-            NSLog(@"[SBTUITestTunnel] Up and running!");
-            return YES;
-        }
-    }
-    
-    BlockAssert(NO, @"[UITestTunnelServer] Fail waiting for launch semaphore");
-    
-    return NO;
+
+    return [self waitForStartupCompletion];
 }
 
 - (BOOL)processCustomCommandIfNecessary:(NSString *)command parameters:(NSDictionary *)parameters returnObject:(NSObject **)returnObject
@@ -356,6 +413,10 @@ static NSTimeInterval SBTUITunneledServerDefaultTimeout = 60.0;
 
 - (NSDictionary *)commandQuit:(NSDictionary *)parameters
 {
+    if (self.httpSessionIdentifier) {
+        NSString *portFilePath = SBTUITestTunnelPortFilePathForSessionIdentifier(self.httpSessionIdentifier);
+        [[NSFileManager defaultManager] removeItemAtPath:portFilePath error:nil];
+    }
     exit(0);
     return @{ SBTUITunnelResponseResultKey: @"YES" };
 }
